@@ -2,42 +2,192 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>안양자동차검사소 하체사진 조회</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TS 안양자동차검사소 | 하체사진 조회</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-body{margin:0;background:#f3f6fa;font-family:Arial,sans-serif;color:#17243b}
-header{background:#1255a2;color:white;padding:26px 16px;text-align:center}
-header h1{font-size:23px;margin:10px 0}
-main{background:white;margin:30px 16px;padding:28px 20px;border-radius:16px;box-shadow:0 4px 18px #0001}
-h2{text-align:center;font-size:21px}
-p{text-align:center;color:#667085;font-size:14px;line-height:1.6}
-input{box-sizing:border-box;width:100%;padding:16px;border:1px solid #cbd5e1;border-radius:9px;font-size:18px;margin-top:20px}
-button{width:100%;padding:16px;margin-top:14px;background:#1255a2;color:white;border:0;border-radius:9px;font-size:17px;font-weight:bold}
-#result{margin-top:20px;text-align:center}
-footer{text-align:center;font-size:12px;color:#667085;margin:30px 10px}
+*{box-sizing:border-box}
+body{margin:0;background:#f3f6fa;color:#243247;font-family:Arial,sans-serif}
+header{background:#1255a2;color:white;text-align:center;padding:28px 16px}
+header h1{font-size:22px;margin:0 0 8px}
+header p{font-size:14px;margin:0;opacity:.9}
+main{max-width:650px;margin:24px auto;padding:0 16px}
+section{background:white;border-radius:14px;padding:22px;margin-bottom:18px;box-shadow:0 3px 14px #0000000a}
+h2{font-size:19px;margin:0 0 15px}
+label{display:block;font-weight:bold;margin-bottom:9px}
+input{width:100%;padding:15px;border:1px solid #ccd5e0;border-radius:9px;font-size:17px}
+button{width:100%;padding:15px;background:#1255a2;color:white;border:0;border-radius:9px;font-size:16px;font-weight:bold;margin-top:14px;cursor:pointer}
+button:disabled{opacity:.5}
+#status{white-space:pre-wrap;line-height:1.6;font-size:14px}
+.hidden{display:none}
+.photo{border:1px solid #e1e7ef;border-radius:12px;overflow:hidden;margin-top:18px}
+.photo img{display:block;width:100%;height:auto}
+.photo footer{padding:12px}
+.photo button{margin-top:0}
+small{color:#667085;line-height:1.6}
 </style>
 </head>
 <body>
 <header>
-<div>TS 한국교통안전공단</div>
-<h1>안양자동차검사소</h1>
-<div>자동차 하체사진 조회 서비스</div>
+<h1>TS 한국교통안전공단</h1>
+<p>안양자동차검사소 | 자동차 하체사진 조회</p>
 </header>
 <main>
-<h2>내 차량 하체사진 조회</h2>
-<p>검사 차량번호를 입력하면<br>등록된 하체사진을 확인할 수 있습니다.</p>
-<input id="car" placeholder="차량번호 입력" autocomplete="off">
-<button onclick="searchPhoto()">하체사진 조회하기</button>
-<div id="result"></div>
+<section>
+<h2>하체사진 조회</h2>
+<label for="plate">차량번호</label>
+<input id="plate" placeholder="예: 12가3456" autocomplete="off">
+<button id="searchBtn">사진 조회하기</button>
+<p><small>검사 후 48시간 이내에 조회할 수 있습니다.</small></p>
+</section>
+
+<section>
+<h2>조회 결과</h2>
+<div id="status">차량번호를 입력하고 조회 버튼을 눌러주세요.</div>
+<div id="results"></div>
+</section>
 </main>
-<footer>시연용 서비스 · 실제 차량정보는 등록하지 마세요.</footer>
+
 <script>
-function searchPhoto(){
- const car=document.getElementById('car').value.trim();
- const result=document.getElementById('result');
- if(!car){result.textContent='차량번호를 입력해 주세요.';return;}
- result.textContent='조회 기능은 다음 단계에서 연결됩니다.';
+const SUPABASE_URL =
+  "https://qxilydmnxkhcxdybzlew.supabase.co";
+const SUPABASE_KEY =
+  "sb_publishable_dgOcMAwzSnNozCaHlD6qHg_hXsnNO_t";
+
+const db = window.supabase.createClient(
+  SUPABASE_URL, SUPABASE_KEY
+);
+
+const $ = id => document.getElementById(id);
+const status = msg => $("status").textContent = msg;
+let currentUrls = [];
+
+function clearResults(){
+  currentUrls.forEach(url => URL.revokeObjectURL(url));
+  currentUrls = [];
+  $("results").replaceChildren();
 }
+
+async function downloadPhoto(path, filename){
+  const {data,error} = await db.storage
+    .from("underbody-photos")
+    .download(path);
+
+  if(error) throw error;
+
+  const url = URL.createObjectURL(data);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+
+$("searchBtn").onclick = async () => {
+  const plate = $("plate").value.trim().replace(/\s/g,"");
+  clearResults();
+
+  if(!/^\d{2,3}[가-힣]\d{4}$/.test(plate)){
+    status("올바른 차량번호를 입력해 주세요.");
+    return;
+  }
+
+  $("searchBtn").disabled = true;
+  status("하체사진을 조회하고 있습니다...");
+
+  try {
+    const {data:vehicles,error:vehicleError} = await db
+      .from("vehicles")
+      .select("id,created_at")
+      .eq("plate_number",plate)
+      .gt("expires_at",new Date().toISOString())
+      .order("created_at",{ascending:false})
+      .limit(1);
+
+    if(vehicleError) throw vehicleError;
+
+    if(!vehicles || vehicles.length===0){
+      status("조회 가능한 사진이 없습니다.");
+      return;
+    }
+
+    const {data:photos,error:photoError} = await db
+      .from("vehicle_photos")
+      .select("storage_path,photo_order")
+      .eq("vehicle_id",vehicles[0].id)
+      .order("photo_order",{ascending:true});
+
+    if(photoError) throw photoError;
+
+    if(!photos || photos.length===0){
+      status("등록된 사진이 없습니다.");
+      return;
+    }
+
+    let count=0;
+    for(const photo of photos){
+      const {data,error} = await db.storage
+        .from("underbody-photos")
+        .download(photo.storage_path);
+
+      if(error){
+        console.error(error);
+        continue;
+      }
+
+      const url = URL.createObjectURL(data);
+      currentUrls.push(url);
+
+      const card = document.createElement("div");
+      card.className = "photo";
+
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = "하체사진 " + photo.photo_order;
+
+      const footer = document.createElement("footer");
+      const btn = document.createElement("button");
+      btn.textContent = "사진 " + photo.photo_order + " 저장";
+
+      const filename = plate + "_하체사진_" +
+        photo.photo_order + "." +
+        (data.type==="image/png" ? "png" :
+         data.type==="image/webp" ? "webp" : "jpg");
+
+      btn.onclick = async () => {
+        btn.disabled = true;
+        try {
+          await downloadPhoto(photo.storage_path,filename);
+        } catch(e) {
+          alert("다운로드 실패: "+e.message);
+        } finally {
+          btn.disabled = false;
+        }
+      };
+
+      footer.appendChild(btn);
+      card.appendChild(img);
+      card.appendChild(footer);
+      $("results").appendChild(card);
+      count++;
+    }
+
+    status(count
+      ? `차량번호: ${plate}\n하체사진 ${count}장 조회 완료`
+      : "사진을 불러오지 못했습니다.");
+
+  } catch(e){
+    status("조회 오류: "+e.message);
+  } finally {
+    $("searchBtn").disabled = false;
+  }
+};
+
+$("plate").addEventListener("keydown",e=>{
+  if(e.key==="Enter") $("searchBtn").click();
+});
 </script>
 </body>
 </html>
